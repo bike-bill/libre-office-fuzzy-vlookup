@@ -204,7 +204,7 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
 
     'Find the last column of the table
     Dim lastCol as Long
-    lastCol = TableArray.CellAddress.Column
+    lastCol = TableArray.RangeAddress.EndColumn
     
     Do while oSheet.getCellByPosition(lastCol,TableArray.CellAddress.Row).String <> ""
         lastCol = lastCol +1
