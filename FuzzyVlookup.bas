@@ -153,6 +153,7 @@ Private Sub FuzzyAlg2(ByVal String1 As String, _
     Next intCurLen
 End Sub
 
+
 Function FuzzyVLookup(ByVal LookupValue As String, _
                      ByVal TableArray As Object, _
                      ByVal IndexNum As Integer, _
@@ -172,9 +173,31 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
     Dim intBestMatchPtr As Long
     Dim sortedRanks() As RankInfo
     Dim vCurValue As Variant
+    Dim lastCol As Long
 
     LookupValue = LCase$(Trim(LookupValue))
     oSheet = ThisComponent.CurrentController.ActiveSheet
+
+    ' Parameter validation
+    If TableArray Is Nothing Then
+        FuzzyVLookup = "*** TableArray is invalid ***"
+        Exit Function
+    End If
+	 
+    If TypeName(TableArray) <> "Range" Then
+        FuzzyVLookup = "*** TableArray must be a cell range ***"
+        Exit Function
+    End If
+
+    If IndexNum < 0 Then
+        FuzzyVLookup = "*** IndexNum must be greater than or equal to 0 ***"
+        Exit Function
+    End If
+
+    If Rank < 1 Then
+        FuzzyVLookup = "*** 'Rank' must be an integer > 0 ***"
+        Exit Function
+    End If
 
     If IsMissing(NFPercent) Then
         sngMinPercent = 0.05
@@ -186,32 +209,10 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
         sngMinPercent = NFPercent
     End If
 
-    If Rank < 1 Then
-        FuzzyVLookup = "*** 'Rank' must be an integer > 0 ***"
-        Exit Function
-    End If
-    
-    ' Parameter validation
-    If TableArray Is Nothing Then
-        FuzzyVLookup = "*** TableArray is invalid ***"
-        Exit Function
-    End If
-
-    If IndexNum < 0 Then
-        FuzzyVLookup = "*** IndexNum must be greater than or equal to 0 ***"
-        Exit Function
-    End If
-
     'Find the last column of the table
-    Dim lastCol as Long
     lastCol = TableArray.RangeAddress.EndColumn
-    
-    Do while oSheet.getCellByPosition(lastCol,TableArray.CellAddress.Row).String <> ""
-        lastCol = lastCol +1
-    Loop
-    lastCol = lastCol -1
 
-    If IndexNum > (lastCol - TableArray.CellAddress.Column + 1) And IndexNum > 0 Then
+    If IndexNum > (lastCol - TableArray.RangeAddress.StartColumn + 1) And IndexNum > 0 Then
         FuzzyVLookup = "*** IndexNum out of bounds ***"
         Exit Function
     End If
@@ -220,8 +221,8 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
     ReDim sortedRanks(1 To Rank)
 
     lEndRow = oSheet.Rows.Count
-    lRow = TableArray.CellAddress.Row
-    lCol = TableArray.CellAddress.Column
+    lRow = TableArray.RangeAddress.StartRow
+    lCol = TableArray.RangeAddress.StartColumn
 
     Do While True
         oCell = oSheet.getCellByPosition(lCol, lRow)
@@ -231,9 +232,9 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
         strListString = LCase$(Trim(vCurValue))
 
         sngCurPercent = FuzzyPercent(String1:=LookupValue, _
-                                     String2:=strListString, _
-                                     Algorithm:=Algorithm, _
-                                     Normalised:=True)
+                                      String2:=strListString, _
+                                      Algorithm:=Algorithm, _
+                                      Normalised:=True)
 
         If sngCurPercent >= sngMinPercent Then
             ' Insert into sortedRanks using binary search
@@ -254,10 +255,11 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
                 FuzzyVLookup = "*** IndexNum out of bounds ***"
             End If
         Else
-            FuzzyVLookup = intBestMatchPtr - TableArray.CellAddress.Row + 1
+            FuzzyVLookup = intBestMatchPtr - TableArray.RangeAddress.StartRow + 1
         End If
     End If
 End Function
+
 
 Private Sub InsertSortedRank(ByRef ranks() As RankInfo, ByVal rankSize As Long, ByVal row As Long, ByVal percentage As Single)
     Dim i As Long, j As Long
@@ -316,7 +318,8 @@ Sub TestFuzzyVLookup
 
     ' Define the lookup parameters
     LookupValue = "Willam" ' Intentionally misspelled to test fuzzy matching
-    TableArray = oSheet.getCellByPosition(0, 0) ' Top-left cell of the table
+    'TableArray = oSheet.getCellByPosition(0, 0) ' Top-left cell of the table
+    TableArray = oSheet.getCellRangeByName("A2:C5") 
     IndexNum = 2 ' Return the "Age" column
     NFPercent = 0.5 ' Minimum match percentage (50%)
     Rank = 1 ' Return the best match
