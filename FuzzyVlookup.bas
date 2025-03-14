@@ -155,7 +155,7 @@ End Sub
 
 
 Function FuzzyVLookup(ByVal LookupValue As String, _
-                     ByVal TableArray As Object, _
+                     ByVal TableArray As Variant, _
                      ByVal IndexNum As Integer, _
                      Optional NFPercent As Single, _
                      Optional Rank As Integer, _
@@ -210,6 +210,7 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
     End If
 
     'Find the last column of the table
+    Set TableArray = oSheet.getCellRangeByName(TableArray)
     lastCol = TableArray.RangeAddress.EndColumn
 
     If IndexNum > (lastCol - TableArray.RangeAddress.StartColumn + 1) And IndexNum > 0 Then
