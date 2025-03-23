@@ -161,6 +161,7 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
                      Optional Rank As Integer, _
                      Optional Algorithm As Integer, _
                      Optional AdditionalCols As Integer) As Variant
+    On Error GoTo ErrorHandler
 
     Dim oSheet As Object
     Dim oCell As Object
@@ -204,7 +205,7 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
         sngMinPercent = 0.05
     Else
         If (NFPercent <= 0) Or (NFPercent > 1) Then
-            FuzzyVLookup = "*** 'NFPercent' must be a percentage > zero ***"
+            FuzzyVLookup = "*** 'NFPercent' must be a percentage > 0 and <= 1 ***"            
             Exit Function
         End If
         sngMinPercent = NFPercent
@@ -222,11 +223,12 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
 
     ReDim sortedRanks(1 To Rank)
 
-    lEndRow = oSheet.Rows.Count
+    ReDim lastEndRow as Long
+    lEndRow = TableArray.RangeAddress.EndRow
     lRow = TableArray.RangeAddress.StartRow
     lCol = TableArray.RangeAddress.StartColumn
 
-    Do While True
+    Do While lRow <= lEndRow
         oCell = oSheet.getCellByPosition(lCol, lRow)
         vCurValue = oCell.String
         If vCurValue = "" Then Exit Do
@@ -260,6 +262,10 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
             FuzzyVLookup = intBestMatchPtr - TableArray.RangeAddress.StartRow + 1
         End If
     End If
+
+    Exit Function
+    ErrorHandler:
+    MsgBox "An error occurred: " & Err.Description, vbExclamation, "FuzzyVLookup Error"
 End Function
 
 
@@ -341,19 +347,3 @@ Sub TestFuzzyVLookup
     MsgBox msg, 0, "FuzzyVLookup Test Result"
 End Sub
 
-Sub TestCellRange()
-    Dim oSheet As Object
-    Dim TableArray As CellRange
-    Dim lastCol as Variant
-
-    oSheet = ThisComponent.CurrentController.ActiveSheet
-
-    TableArray = oSheet.getCellRangeByName("A2:C5")
-    MsgBox TypeName(TableArray)
-    REM Set TableArray = oSheet.getCellRangeByName(TableArray)
-    lastCol = TableArray.RangeAddress.EndColumn
-
-    ' Now you can work with TableArray
-    MsgBox TableArray.AbsoluteName, 0, "Range Info"
-
-End Sub
