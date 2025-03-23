@@ -155,7 +155,7 @@ End Sub
 
 
 Function FuzzyVLookup(ByVal LookupValue As String, _
-                     ByVal TableArray As Variant, _
+                     ByVal TableArray As CellRange, _
                      ByVal IndexNum As Integer, _
                      Optional NFPercent As Single, _
                      Optional Rank As Integer, _
@@ -166,12 +166,12 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
     Dim oCell As Object
     Dim lEndRow As Long
     Dim lRow As Long
-    Dim lCol As Long
-    Dim strListString As String
+    Dim lCol as Long
     Dim sngMinPercent As Single
     Dim sngCurPercent As Single
     Dim intBestMatchPtr As Long
     Dim sortedRanks() As RankInfo
+    Dim strListString as String
     Dim vCurValue As Variant
     Dim lastCol As Long
 
@@ -184,8 +184,9 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
         Exit Function
     End If
 	 
-    If TypeName(TableArray) <> "Range" Then
-        FuzzyVLookup = "*** TableArray must be a cell range ***"
+    If TypeName(TableArray) <> "SheetCellRange" Then
+        MsgBox TypeName(TableArray)
+        FuzzyVLookup = "*** TableArray must be a CellRange ***"
         Exit Function
     End If
 
@@ -210,7 +211,7 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
     End If
 
     'Find the last column of the table
-    Set TableArray = oSheet.getCellRangeByName(TableArray)
+    ' Set TableArray = oSheet.getCellRangeByName(TableArray)
     lastCol = TableArray.RangeAddress.EndColumn
 
     If IndexNum > (lastCol - TableArray.RangeAddress.StartColumn + 1) And IndexNum > 0 Then
@@ -282,7 +283,7 @@ Sub TestFuzzyVLookup
     Dim oCell As Object
     Dim vResult As Variant
     Dim LookupValue As String
-    Dim TableArray As Object
+    Dim TableArray As CellRange
     Dim IndexNum As Integer
     Dim NFPercent As Single
     Dim Rank As Integer
@@ -338,4 +339,21 @@ Sub TestFuzzyVLookup
     End If
 
     MsgBox msg, 0, "FuzzyVLookup Test Result"
+End Sub
+
+Sub TestCellRange()
+    Dim oSheet As Object
+    Dim TableArray As CellRange
+    Dim lastCol as Variant
+
+    oSheet = ThisComponent.CurrentController.ActiveSheet
+
+    TableArray = oSheet.getCellRangeByName("A2:C5")
+    MsgBox TypeName(TableArray)
+    REM Set TableArray = oSheet.getCellRangeByName(TableArray)
+    lastCol = TableArray.RangeAddress.EndColumn
+
+    ' Now you can work with TableArray
+    MsgBox TableArray.AbsoluteName, 0, "Range Info"
+
 End Sub
