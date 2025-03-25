@@ -223,7 +223,6 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
 
     ReDim sortedRanks(1 To Rank)
 
-    ReDim lastEndRow as Long
     lEndRow = TableArray.RangeAddress.EndRow
     lRow = TableArray.RangeAddress.StartRow
     lCol = TableArray.RangeAddress.StartColumn
