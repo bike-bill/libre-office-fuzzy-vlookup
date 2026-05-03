@@ -17,8 +17,6 @@ Function FuzzyPercent(ByVal String1 As String, _
                      Optional Algorithm As Variant, _
                      Optional Normalised As Variant) As Single
     Dim intLen1 As Integer, intLen2 As Integer
-    Dim intScore As Integer
-    Dim intTotScore As Integer
     Dim intScoreAlg1 As Integer
     Dim intTotScoreAlg1 As Integer
     Dim intScoreAlg2 As Integer
@@ -77,8 +75,6 @@ Function FuzzyPercent(ByVal String1 As String, _
         Exit Function
     End If
 
-    intScore = 0
-    intTotScore = 0
     intScoreAlg1 = 0
     intTotScoreAlg1 = 0
     intScoreAlg2 = 0
@@ -339,12 +335,12 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
     sngMinPercent = 0.05
     If Not (IsMissing(NFPercent) Or IsEmpty(NFPercent)) Then
         If Not IsNumeric(NFPercent) Then
-            FuzzyVLookup = NFPercent & " 1. *** 'NFPercent' must be numeric and > 0 and <= 1 ***"
+            FuzzyVLookup = "*** 'NFPercent' must be numeric and > 0 and <= 1 ***"
             Exit Function
         End If
         sngMinPercent = CSng(NFPercent)
         If (sngMinPercent <= 0) Or (sngMinPercent > 1) Then
-            FuzzyVLookup = NFPercent & " 2. *** 'NFPercent' must be a percentage > 0 and <= 1 ***"            
+            FuzzyVLookup = "*** 'NFPercent' must be a percentage > 0 and <= 1 ***"
             Exit Function
         End If
     End If
@@ -422,8 +418,11 @@ Sub TestFuzzyVLookup
     Dim oSheets As Object
     Dim oSheet As Object
     Dim oCell As Object
+    Dim oProbeCell As Object
     Dim vResult As Variant
     Dim sFormula As String
+    Dim sArgSep As String
+    Dim nErr As Long
     Dim msg As String
     Const TEST_SHEET_NAME As String = "FuzzyVLookupTest"
 
@@ -464,8 +463,16 @@ Sub TestFuzzyVLookup
     ' --- Test by writing the formula to a cell and reading the result ---
     ' This simulates a real user call, which is necessary to get the
     ' special VBA-style Range object that FuzzyVLookup expects.
+    oProbeCell = oSheet.getCellByPosition(6, 0) ' G1
     oCell = oSheet.getCellByPosition(5, 0) ' F1
-    sFormula = "=FUZZYVLOOKUP(""Willam""; A2:C5; 2; 1/2; 1; 3)"
+
+    ' Detect Calc argument separator for locale-agnostic formula construction.
+    sArgSep = ";"
+    oProbeCell.setFormula("=SUM(1;2)")
+    nErr = oProbeCell.getError()
+    If nErr <> 0 Then sArgSep = ","
+
+    sFormula = "=FUZZYVLOOKUP(""Willam""" & sArgSep & " A2:C5" & sArgSep & " 2" & sArgSep & " 1/2" & sArgSep & " 1" & sArgSep & " 3)"
     oCell.setFormula(sFormula)
 
     ' Read the result from the cell
@@ -478,7 +485,7 @@ Sub TestFuzzyVLookup
         MsgBox msg, 16, "FuzzyVLookup Test Result"
     Else
         msg = "Match found for 'Willam': " & vResult
+        MsgBox msg, 64, "FuzzyVLookup Test Result"
     End If
-    MsgBox msg, 64, "FuzzyVLookup Test Result"
 End Sub
 
