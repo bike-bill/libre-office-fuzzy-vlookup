@@ -251,59 +251,80 @@ End Sub
 
 
 Function FuzzyVLookup(ByVal LookupValue As String, _
-                     ByVal TableArray As CellRange, _
+                     ByVal TableArray As Variant, _
                      ByVal IndexNum As Integer, _
                      Optional NFPercent As Variant, _
                      Optional Rank As Variant, _
                      Optional Algorithm As Variant) As Variant
     On Error GoTo ErrorHandler
 
-    Dim oSheet As Object
-    Dim oCell As Object
-    Dim lEndRow As Long
     Dim lRow As Long
-    Dim lCol as Long
     Dim sngMinPercent As Single
     Dim sngCurPercent As Single
     Dim intBestMatchPtr As Long
     Dim sortedRanks() As RankInfo
     Dim strListString as String
     Dim vCurValue As Variant
-    Dim lastCol As Long
+    Dim nCols As Long
     Dim intRank As Integer
     Dim intAlgorithm As Integer
+    Dim arrData As Variant
+    Dim rowLB As Long, rowUB As Long
+    Dim colLB As Long, colUB As Long
+    Dim retCol As Long
+    Dim relRow As Long
+    Dim blnHaveData As Boolean
 
     LookupValue = LCase$(Trim(LookupValue))
 
-    ' Assign defaults for optional parameters
-    If IsMissing(Rank) Or IsEmpty(Rank) Then
-        intRank = 1
-    Else
-        intRank = CInt(Rank)
+    ' Normalize TableArray into a 2D array.
+    ' With Option VBASupport 1, Calc passes a range reference as a VBA-style
+    ' Range object (TypeName = "Range").  Its .Value property gives a 2D array.
+    ' A plain array can be used directly.
+    blnHaveData = False
+    If IsArray(TableArray) Then
+        arrData = TableArray
+        blnHaveData = True
+    ElseIf IsObject(TableArray) Then
+        If TableArray Is Nothing Then
+            FuzzyVLookup = "*** TableArray is invalid ***"
+            Exit Function
+        End If
+        If TypeName(TableArray) = "Range" Then
+            ' VBA-compatible Range object — .Value returns a 2D Variant array
+            arrData = TableArray.Value
+            blnHaveData = True
+        Else
+            ' UNO SheetCellRange — use getDataArray()
+            On Error GoTo RangeArrayError
+            arrData = TableArray.getDataArray()
+            blnHaveData = True
+            On Error GoTo ErrorHandler
+        End If
     End If
 
-    If IsMissing(Algorithm) Or IsEmpty(Algorithm) Then
-        intAlgorithm = 3
-    Else
-        intAlgorithm = CInt(Algorithm)
+    If blnHaveData = False Then
+        FuzzyVLookup = "*** TableArray must be a CellRange or range array ***"
+        Exit Function
+    End If
+
+    rowLB = LBound(arrData, 1)
+    rowUB = UBound(arrData, 1)
+    colLB = LBound(arrData, 2)
+    colUB = UBound(arrData, 2)
+    nCols = colUB - colLB + 1
+
+    ' Assign defaults for optional parameters (conversion-safe)
+    intRank = 1
+    If Not (IsMissing(Rank) Or IsEmpty(Rank)) Then
+        If IsNumeric(Rank) Then intRank = CInt(Rank)
+    End If
+
+    intAlgorithm = 3
+    If Not (IsMissing(Algorithm) Or IsEmpty(Algorithm)) Then
+        If IsNumeric(Algorithm) Then intAlgorithm = CInt(Algorithm)
     End If
     If intAlgorithm < 1 Or intAlgorithm > 3 Then intAlgorithm = 3
-
-    ' Use the sheet that owns TableArray rather than whichever sheet happens to
-    ' be active — makes the function correct when called from a different sheet.
-    oSheet = ThisComponent.Sheets.getByIndex(TableArray.RangeAddress.Sheet)
-
-    ' Parameter validation
-    If TableArray Is Nothing Then
-        FuzzyVLookup = "*** TableArray is invalid ***"
-        Exit Function
-    End If
-	 
-    If TypeName(TableArray) <> "SheetCellRange" Then
-        MsgBox TypeName(TableArray)
-        FuzzyVLookup = "*** TableArray must be a CellRange ***"
-        Exit Function
-    End If
 
     If IndexNum < 0 Then
         FuzzyVLookup = "*** IndexNum must be greater than or equal to 0 ***"
@@ -315,9 +336,12 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
         Exit Function
     End If
 
-    If IsMissing(NFPercent) Or IsEmpty(NFPercent) Then
-        sngMinPercent = 0.05
-    Else
+    sngMinPercent = 0.05
+    If Not (IsMissing(NFPercent) Or IsEmpty(NFPercent)) Then
+        If Not IsNumeric(NFPercent) Then
+            FuzzyVLookup = "*** 'NFPercent' must be numeric and > 0 and <= 1 ***"
+            Exit Function
+        End If
         sngMinPercent = CSng(NFPercent)
         If (sngMinPercent <= 0) Or (sngMinPercent > 1) Then
             FuzzyVLookup = "*** 'NFPercent' must be a percentage > 0 and <= 1 ***"            
@@ -325,27 +349,19 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
         End If
     End If
 
-    'Find the last column of the table
-    ' Set TableArray = oSheet.getCellRangeByName(TableArray)
-    lastCol = TableArray.RangeAddress.EndColumn
-
-    If IndexNum > (lastCol - TableArray.RangeAddress.StartColumn + 1) And IndexNum > 0 Then
+    If IndexNum > nCols And IndexNum > 0 Then
         FuzzyVLookup = "*** IndexNum out of bounds ***"
         Exit Function
     End If
-    'End validation.
 
     ReDim sortedRanks(1 To intRank)
 
-    lEndRow = TableArray.RangeAddress.EndRow
-    lRow = TableArray.RangeAddress.StartRow
-    lCol = TableArray.RangeAddress.StartColumn
+    lRow = rowLB
+    Do While lRow <= rowUB
+        vCurValue = arrData(lRow, colLB)
 
-    Do While lRow <= lEndRow
-        oCell = oSheet.getCellByPosition(lCol, lRow)
-        vCurValue = oCell.String
         ' Skip blank cells rather than halting — the table may have gaps
-        If vCurValue <> "" Then
+        If Trim(CStr(vCurValue)) <> "" Then
             strListString = LCase$(Trim(vCurValue))
 
             sngCurPercent = FuzzyPercent(String1:=LookupValue, _
@@ -367,16 +383,17 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
     Else
         intBestMatchPtr = sortedRanks(intRank).Offset
         If IndexNum > 0 Then
-            If lCol + IndexNum - 1 <= oSheet.Columns.Count Then
-                FuzzyVLookup = oSheet.getCellByPosition(lCol + IndexNum - 1, intBestMatchPtr).String
-            Else
-                FuzzyVLookup = "*** IndexNum out of bounds ***"
-            End If
+            retCol = colLB + IndexNum - 1
+            FuzzyVLookup = arrData(intBestMatchPtr, retCol)
         Else
-            FuzzyVLookup = intBestMatchPtr - TableArray.RangeAddress.StartRow + 1
+            relRow = intBestMatchPtr - rowLB + 1
+            FuzzyVLookup = relRow
         End If
     End If
 
+    Exit Function
+    RangeArrayError:
+    FuzzyVLookup = "*** TableArray must be a CellRange or range array ***"
     Exit Function
     ErrorHandler:
     ' Return a #VALUE! error rather than showing a MsgBox, which is disruptive
