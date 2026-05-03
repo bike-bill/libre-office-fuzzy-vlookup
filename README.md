@@ -38,10 +38,10 @@ Returns the matched cell value, or a `#N/A` error if no match meets `NFPercent`.
 **Examples**
 
 ```
-=FuzzyVLookup("Willam", A2:C10, 2)              ' best match, Age column, default settings
-=FuzzyVLookup("Willam", A2:C10, 2, 0.6)         ' require ≥ 60 % match
-=FuzzyVLookup("Willam", A2:C10, 2, 0.5, 2)      ' return the 2nd-best match
-=FuzzyVLookup("Willam", A2:C10, 0)              ' return matched row offset (1-based)
+=FuzzyVLookup("Willam", A2:C5, 2)              ' best match, Age column, default settings
+=FuzzyVLookup("Willam", A2:C5, 2, 0.6)         ' require ≥ 60 % match
+=FuzzyVLookup("Willam", A2:C5, 2, 0.5, 2)      ' return the 2nd-best match
+=FuzzyVLookup("Willam", A2:C5, 0)              ' return matched row offset (1-based)
 ```
 
 ---
