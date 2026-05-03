@@ -469,15 +469,16 @@ Sub TestFuzzyVLookup
     oCell.setFormula(sFormula)
 
     ' Read the result from the cell
-    'vResult = oCell.getValue()
+    vResult = oCell.getString()
+    If vResult = "" Then vResult = oCell.getValue()
 
     ' Display the result
-    'If oCell.getError() <> 0 Then
-    '    msg = "Test failed. Formula returned error code: " & vResult & " " & oCell.getError()
-    '    MsgBox msg, 16, "FuzzyVLookup Test Result"
-    'Else
-    '    msg = "Match found for 'Willam': " & vResult
-    '    MsgBox msg, 0, "FuzzyVLookup Test Result"
-    'End If
+    If oCell.getError() <> 0 Then
+        msg = "Test failed. Formula returned error code: " & vResult & " " & oCell.getError()
+        MsgBox msg, 16, "FuzzyVLookup Test Result"
+    Else
+        msg = "Match found for 'Willam': " & vResult
+    End If
+    MsgBox msg, 64, "FuzzyVLookup Test Result"
 End Sub
 
