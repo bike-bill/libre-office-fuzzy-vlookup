@@ -473,7 +473,7 @@ Sub TestFuzzyVLookup
 
     ' Display the result
     If oCell.getError() <> 0 Then
-        msg = "Test failed. Formula returned error code: " & oCell.getError()
+        msg = "Test failed. Formula returned error code: " & vResult & " " & oCell.getError()
         MsgBox msg, 16, "FuzzyVLookup Test Result"
     Else
         msg = "Match found for 'Willam': " & vResult
