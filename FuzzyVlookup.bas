@@ -424,7 +424,7 @@ Sub TestFuzzyVLookup
     Dim oCell As Object
     Dim vResult As Variant
     Dim LookupValue As String
-    Dim TableArray As CellRange
+    Dim TableArray As Object
     Dim IndexNum As Integer
     Dim NFPercent As Single
     Dim Rank As Integer
@@ -479,6 +479,7 @@ Sub TestFuzzyVLookup
 
     ' Display the result
     If IsError(vResult) Then
+        MsgBox vResult
         msg = "No match found for '" & LookupValue & "'."
     Else
         msg = "Match found for '" & LookupValue & "': " & vResult
