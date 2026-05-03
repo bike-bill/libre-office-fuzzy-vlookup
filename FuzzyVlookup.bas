@@ -58,7 +58,7 @@ Function FuzzyPercent(ByVal String1 As String, _
     '----------------------------------------
     '-- Give 0% match if string length < 2 --
     '----------------------------------------
-    If intLen1 < 2 Then
+    If intLen1 < 2 Or intLen2 < 2 Then
         FuzzyPercent = 0
         Exit Function
     End If
@@ -134,7 +134,12 @@ Private Sub FuzzyAlg2(ByVal String1 As String, _
     strWork = String2 ' Create the copy once
 
     For intCurLen = 2 To intLen1
-        ReDim corruptPositions(1 To Len(strWork)) ' Reset corrupted positions
+        ' Score contribution for this pass: Int(intLen1 / intCurLen) represents the
+        ' maximum number of non-overlapping substrings of length intCurLen that can
+        ' fit in String1.  Array is sized Len(strWork)+intLen1 to prevent out-of-bounds
+        ' writes when a match starts near the end of strWork and spans intCurLen-1
+        ' positions past the last character.
+        ReDim corruptPositions(1 To Len(strWork) + intLen1)
 
         intTo = intLen1 - intCurLen + 1
         TotScore = TotScore + Int(intLen1 / intCurLen)
@@ -159,8 +164,7 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
                      ByVal IndexNum As Integer, _
                      Optional NFPercent As Single, _
                      Optional Rank As Integer, _
-                     Optional Algorithm As Integer, _
-                     Optional AdditionalCols As Integer) As Variant
+                     Optional Algorithm As Integer) As Variant
     On Error GoTo ErrorHandler
 
     Dim oSheet As Object
@@ -177,7 +181,14 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
     Dim lastCol As Long
 
     LookupValue = LCase$(Trim(LookupValue))
-    oSheet = ThisComponent.CurrentController.ActiveSheet
+
+    ' Assign defaults for optional parameters
+    If IsMissing(Rank) Then Rank = 1
+    If IsMissing(Algorithm) Then Algorithm = 3
+
+    ' Use the sheet that owns TableArray rather than whichever sheet happens to
+    ' be active — makes the function correct when called from a different sheet.
+    oSheet = ThisComponent.Sheets.getByIndex(TableArray.RangeAddress.Sheet)
 
     ' Parameter validation
     If TableArray Is Nothing Then
@@ -230,18 +241,19 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
     Do While lRow <= lEndRow
         oCell = oSheet.getCellByPosition(lCol, lRow)
         vCurValue = oCell.String
-        If vCurValue = "" Then Exit Do
+        ' Skip blank cells rather than halting — the table may have gaps
+        If vCurValue <> "" Then
+            strListString = LCase$(Trim(vCurValue))
 
-        strListString = LCase$(Trim(vCurValue))
+            sngCurPercent = FuzzyPercent(String1:=LookupValue, _
+                                          String2:=strListString, _
+                                          Algorithm:=Algorithm, _
+                                          Normalised:=True)
 
-        sngCurPercent = FuzzyPercent(String1:=LookupValue, _
-                                      String2:=strListString, _
-                                      Algorithm:=Algorithm, _
-                                      Normalised:=True)
-
-        If sngCurPercent >= sngMinPercent Then
-            ' Insert into sortedRanks using binary search
-            InsertSortedRank sortedRanks, Rank, lRow, sngCurPercent
+            If sngCurPercent >= sngMinPercent Then
+                ' Insert into sortedRanks using binary search
+                InsertSortedRank sortedRanks, Rank, lRow, sngCurPercent
+            End If
         End If
 
         lRow = lRow + 1
@@ -264,7 +276,9 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
 
     Exit Function
     ErrorHandler:
-    MsgBox "An error occurred: " & Err.Description, vbExclamation, "FuzzyVLookup Error"
+    ' Return a #VALUE! error rather than showing a MsgBox, which is disruptive
+    ' in cell-formula context and broken in headless environments.
+    FuzzyVLookup = CVErr(2036)
 End Function
 
 
@@ -284,6 +298,8 @@ End Sub
 
 
 Sub TestFuzzyVLookup
+    Dim oDoc As Object
+    Dim oSheets As Object
     Dim oSheet As Object
     Dim oCell As Object
     Dim vResult As Variant
@@ -293,14 +309,21 @@ Sub TestFuzzyVLookup
     Dim NFPercent As Single
     Dim Rank As Integer
     Dim Algorithm As Integer
-    Dim AdditionalCols As Integer
     Dim msg As String
+    Const TEST_SHEET_NAME As String = "FuzzyVLookupTest"
 
-    ' Get the active sheet
-    oSheet = ThisComponent.CurrentController.ActiveSheet
+    ' Use a dedicated test sheet — never touch the user's active sheet
+    oDoc = ThisComponent
+    oSheets = oDoc.Sheets
+    If oSheets.hasByName(TEST_SHEET_NAME) Then
+        oSheet = oSheets.getByName(TEST_SHEET_NAME)
+    Else
+        oSheets.insertNewByName(TEST_SHEET_NAME, oSheets.Count)
+        oSheet = oSheets.getByName(TEST_SHEET_NAME)
+    End If
 
-    ' Clear the sheet (optional)
-    oSheet.clearContents(0)
+    ' Clear text and numeric values in the test sheet
+    oSheet.clearContents(7)
 
     ' Define a small dataset in the sheet
     oSheet.getCellByPosition(0, 0).String = "Name"
@@ -331,10 +354,8 @@ Sub TestFuzzyVLookup
     NFPercent = 0.5 ' Minimum match percentage (50%)
     Rank = 1 ' Return the best match
     Algorithm = 3 ' Use both algorithms
-    AdditionalCols = 0 ' No additional columns
-
     ' Call the FuzzyVLookup function
-    vResult = FuzzyVLookup(LookupValue, TableArray, IndexNum, NFPercent, Rank, Algorithm, AdditionalCols)
+    vResult = FuzzyVLookup(LookupValue, TableArray, IndexNum, NFPercent, Rank, Algorithm)
 
     ' Display the result
     If IsError(vResult) Then
