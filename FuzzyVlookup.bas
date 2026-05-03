@@ -423,12 +423,7 @@ Sub TestFuzzyVLookup
     Dim oSheet As Object
     Dim oCell As Object
     Dim vResult As Variant
-    Dim LookupValue As String
-    Dim TableArray As Object
-    Dim IndexNum As Integer
-    Dim NFPercent As Single
-    Dim Rank As Integer
-    Dim Algorithm As Integer
+    Dim sFormula As String
     Dim msg As String
     Const TEST_SHEET_NAME As String = "FuzzyVLookupTest"
 
@@ -466,25 +461,23 @@ Sub TestFuzzyVLookup
     oSheet.getCellByPosition(1, 4).String = "35"
     oSheet.getCellByPosition(2, 4).String = "Houston"
 
-    ' Define the lookup parameters
-    LookupValue = "Willam" ' Intentionally misspelled to test fuzzy matching
-    'TableArray = oSheet.getCellByPosition(0, 0) ' Top-left cell of the table
-    TableArray = oSheet.getCellRangeByName("A2:C5") 
-    IndexNum = 2 ' Return the "Age" column
-    NFPercent = 0.5 ' Minimum match percentage (50%)
-    Rank = 1 ' Return the best match
-    Algorithm = 3 ' Use both algorithms
-    ' Call the FuzzyVLookup function
-    vResult = FuzzyVLookup(LookupValue, TableArray, IndexNum, NFPercent, Rank, Algorithm)
+    ' --- Test by writing the formula to a cell and reading the result ---
+    ' This simulates a real user call, which is necessary to get the
+    ' special VBA-style Range object that FuzzyVLookup expects.
+    oCell = oSheet.getCellByPosition(5, 0) ' F1
+    sFormula = "=FUZZYVLOOKUP(""Willam"", A2:C5, 2, 0.5, 1, 3)"
+    oCell.setFormula(sFormula)
+
+    ' Read the result from the cell
+    vResult = oCell.getValue()
 
     ' Display the result
-    If IsError(vResult) Then
-        MsgBox vResult
-        msg = "No match found for '" & LookupValue & "'."
+    If oCell.getError() <> 0 Then
+        msg = "Test failed. Formula returned error code: " & oCell.getError()
+        MsgBox msg, 16, "FuzzyVLookup Test Result"
     Else
-        msg = "Match found for '" & LookupValue & "': " & vResult
+        msg = "Match found for 'Willam': " & vResult
+        MsgBox msg, 0, "FuzzyVLookup Test Result"
     End If
-
-    MsgBox msg, 0, "FuzzyVLookup Test Result"
 End Sub
 
