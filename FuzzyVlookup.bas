@@ -339,12 +339,12 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
     sngMinPercent = 0.05
     If Not (IsMissing(NFPercent) Or IsEmpty(NFPercent)) Then
         If Not IsNumeric(NFPercent) Then
-            FuzzyVLookup = "*** 'NFPercent' must be numeric and > 0 and <= 1 ***"
+            FuzzyVLookup = NFPercent & " 1. *** 'NFPercent' must be numeric and > 0 and <= 1 ***"
             Exit Function
         End If
         sngMinPercent = CSng(NFPercent)
         If (sngMinPercent <= 0) Or (sngMinPercent > 1) Then
-            FuzzyVLookup = "*** 'NFPercent' must be a percentage > 0 and <= 1 ***"            
+            FuzzyVLookup = NFPercent & " 2. *** 'NFPercent' must be a percentage > 0 and <= 1 ***"            
             Exit Function
         End If
     End If
@@ -422,12 +422,8 @@ Sub TestFuzzyVLookup
     Dim oSheets As Object
     Dim oSheet As Object
     Dim oCell As Object
-    Dim oProbeCell As Object
     Dim vResult As Variant
     Dim sFormula As String
-    Dim sDecimalSep As String
-    Dim sArgSep As String
-    Dim nErr As Long
     Dim msg As String
     Const TEST_SHEET_NAME As String = "FuzzyVLookupTest"
 
@@ -465,39 +461,11 @@ Sub TestFuzzyVLookup
     oSheet.getCellByPosition(1, 4).String = "35"
     oSheet.getCellByPosition(2, 4).String = "Houston"
 
-    ' Put NFPercent in a cell as a real numeric value (locale-safe)
-    oSheet.getCellByPosition(7, 0).Value = 0.5 ' H1
-
-    ' Detect parser separators for diagnostics.
-    sDecimalSep = "unknown"
-    sArgSep = "unknown"
-    oProbeCell = oSheet.getCellByPosition(6, 0) ' G1
-
-    oProbeCell.setFormula("=1.5+1")
-    nErr = oProbeCell.getError()
-    If nErr = 0 Then
-        sDecimalSep = "."
-    Else
-        oProbeCell.setFormula("=1,5+1")
-        nErr = oProbeCell.getError()
-        If nErr = 0 Then sDecimalSep = ","
-    End If
-
-    oProbeCell.setFormula("=SUM(1,2)")
-    nErr = oProbeCell.getError()
-    If nErr = 0 Then
-        sArgSep = ","
-    Else
-        oProbeCell.setFormula("=SUM(1;2)")
-        nErr = oProbeCell.getError()
-        If nErr = 0 Then sArgSep = ";"
-    End If
-
     ' --- Test by writing the formula to a cell and reading the result ---
     ' This simulates a real user call, which is necessary to get the
     ' special VBA-style Range object that FuzzyVLookup expects.
     oCell = oSheet.getCellByPosition(5, 0) ' F1
-    sFormula = "=FUZZYVLOOKUP(""Willam"", A2:C5, 2, H1, 1, 3)"
+    sFormula = "=FUZZYVLOOKUP(""Willam"", A2:C5, 2, 1/2, 1, 3)"
     oCell.setFormula(sFormula)
 
     ' Read the result from the cell
@@ -505,16 +473,10 @@ Sub TestFuzzyVLookup
 
     ' Display the result
     If oCell.getError() <> 0 Then
-        msg = "Test failed. Formula returned error code: " & oCell.getError() & Chr(10) & _
-              "Formula: " & sFormula & Chr(10) & _
-              "Detected decimal separator: " & sDecimalSep & Chr(10) & _
-              "Detected argument separator: " & sArgSep
+        msg = "Test failed. Formula returned error code: " & oCell.getError()
         MsgBox msg, 16, "FuzzyVLookup Test Result"
     Else
-        msg = "Match found for 'Willam': " & vResult & Chr(10) & _
-              "Formula: " & sFormula & Chr(10) & _
-              "Detected decimal separator: " & sDecimalSep & Chr(10) & _
-              "Detected argument separator: " & sArgSep
+        msg = "Match found for 'Willam': " & vResult
         MsgBox msg, 0, "FuzzyVLookup Test Result"
     End If
 End Sub
