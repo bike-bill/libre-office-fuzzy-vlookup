@@ -76,7 +76,7 @@ Returns a match score between 0 and 1 for two strings.
 |-------|------|-------------|
 | `1` | Character match | Scores how many individual characters from `String1` appear (in order) in `String2`. |
 | `2` | Substring match | Scores how many substrings of increasing length (pairs, triplets, …) from `String1` appear in `String2`. |
-| `3` | Combined | Runs both algorithms and combines their scores. Recommended for general use. |
+| `3` | Combined | Runs both algorithms plus edit-distance similarity, then uses the strongest score. Recommended for general use and typo tolerance. |
 
 ---
 

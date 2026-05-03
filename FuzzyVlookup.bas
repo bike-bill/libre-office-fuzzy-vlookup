@@ -14,26 +14,40 @@ End Type
 '*************************************
 Function FuzzyPercent(ByVal String1 As String, _
                      ByVal String2 As String, _
-                     Optional Algorithm As Integer, _
-                     Optional Normalised As Boolean) As Single
+                     Optional Algorithm As Variant, _
+                     Optional Normalised As Variant) As Single
     Dim intLen1 As Integer, intLen2 As Integer
-    Dim intCurLen As Integer
-    Dim intTo As Integer
-    Dim intPos As Integer
-    Dim intPtr As Integer
     Dim intScore As Integer
     Dim intTotScore As Integer
-    Dim intStartPos As Integer
-    Dim strWork As String
+    Dim intScoreAlg1 As Integer
+    Dim intTotScoreAlg1 As Integer
+    Dim intScoreAlg2 As Integer
+    Dim intTotScoreAlg2 As Integer
+    Dim sngPercentAlg1 As Single
+    Dim sngPercentAlg2 As Single
+    Dim sngPercentEdit As Single
 
-    ' Assign default values manually
-    If IsMissing(Algorithm) Then Algorithm = 3
-    If IsMissing(Normalised) Then Normalised = FALSE
+    Dim intAlgorithm As Integer
+    Dim blnNormalised As Boolean
+
+    ' Optional args from Calc formulas are Variants; default explicitly.
+    If IsMissing(Algorithm) Or IsEmpty(Algorithm) Then
+        intAlgorithm = 3
+    Else
+        intAlgorithm = CInt(Algorithm)
+    End If
+    If intAlgorithm < 1 Or intAlgorithm > 3 Then intAlgorithm = 3
+
+    If IsMissing(Normalised) Or IsEmpty(Normalised) Then
+        blnNormalised = FALSE
+    Else
+        blnNormalised = CBool(Normalised)
+    End If
 
     '-------------------------------------------------------
     '-- If strings haven't been normalised, normalise them --
     '-------------------------------------------------------
-    If Normalised = FALSE Then
+    If blnNormalised = FALSE Then
         String1 = LCase$(Trim(String1))
         String2 = LCase$(Trim(String2))
     End If
@@ -63,31 +77,108 @@ Function FuzzyPercent(ByVal String1 As String, _
         Exit Function
     End If
 
-    intTotScore = 0        'initialise total possible score
-    intScore = 0           'initialise current score
+    intScore = 0
+    intTotScore = 0
+    intScoreAlg1 = 0
+    intTotScoreAlg1 = 0
+    intScoreAlg2 = 0
+    intTotScoreAlg2 = 0
+    sngPercentAlg1 = 0
+    sngPercentAlg2 = 0
+    sngPercentEdit = 0
 
     '--------------------------------------------------------
     '-- If Algorithm = 1 or 3, Search for single characters --
     '--------------------------------------------------------
-    If (Algorithm And 1) <> 0 Then
-        FuzzyAlg1 String1, String2, intScore, intTotScore
-        If intLen1 < intLen2 Then FuzzyAlg1 String2, String1, intScore, intTotScore
+    If (intAlgorithm And 1) <> 0 Then
+        FuzzyAlg1 String1, String2, intScoreAlg1, intTotScoreAlg1
+        If intLen1 < intLen2 Then FuzzyAlg1 String2, String1, intScoreAlg1, intTotScoreAlg1
+        If intTotScoreAlg1 > 0 Then sngPercentAlg1 = intScoreAlg1 / intTotScoreAlg1
     End If
 
     '-----------------------------------------------------------
     '-- If Algorithm = 2 or 3, Search for pairs, triplets etc. --
     '-----------------------------------------------------------
-    If (Algorithm And 2)<> 0 Then
-    	FuzzyAlg2 String1, String2, intScore, intTotScore
-        If intLen1 < intLen2 Then FuzzyAlg2 String2, String1, intScore, intTotScore
+    If (intAlgorithm And 2)<> 0 Then
+    	FuzzyAlg2 String1, String2, intScoreAlg2, intTotScoreAlg2
+        If intLen1 < intLen2 Then FuzzyAlg2 String2, String1, intScoreAlg2, intTotScoreAlg2
+        If intTotScoreAlg2 > 0 Then sngPercentAlg2 = intScoreAlg2 / intTotScoreAlg2
     End If
 
-    If intTotScore > 0 Then
-        FuzzyPercent = intScore / intTotScore
+    If intAlgorithm = 1 Then
+        FuzzyPercent = sngPercentAlg1
+    ElseIf intAlgorithm = 2 Then
+        FuzzyPercent = sngPercentAlg2
     Else
-        FuzzyPercent = 0
+        ' Edit-distance similarity is strong for small typos (insert/delete/replace).
+        sngPercentEdit = NormalizedEditSimilarity(String1, String2)
+
+        ' Combined mode should not penalize close typo matches when one algorithm
+        ' already indicates a strong match.
+        If sngPercentAlg1 > sngPercentAlg2 Then
+            FuzzyPercent = sngPercentAlg1
+        Else
+            FuzzyPercent = sngPercentAlg2
+        End If
+        If sngPercentEdit > FuzzyPercent Then FuzzyPercent = sngPercentEdit
     End If
 
+End Function
+
+
+Private Function NormalizedEditSimilarity(ByVal String1 As String, ByVal String2 As String) As Single
+    Dim len1 As Integer, len2 As Integer
+    Dim maxLen As Integer
+    Dim i As Integer, j As Integer
+    Dim cost As Integer
+    Dim deletion As Integer, insertion As Integer, substitution As Integer
+    Dim dist() As Integer
+    Dim editDistance As Integer
+
+    len1 = Len(String1)
+    len2 = Len(String2)
+
+    If len1 = 0 And len2 = 0 Then
+        NormalizedEditSimilarity = 1
+        Exit Function
+    End If
+
+    ReDim dist(0 To len1, 0 To len2)
+
+    For i = 0 To len1
+        dist(i, 0) = i
+    Next i
+    For j = 0 To len2
+        dist(0, j) = j
+    Next j
+
+    For i = 1 To len1
+        For j = 1 To len2
+            If Mid$(String1, i, 1) = Mid$(String2, j, 1) Then
+                cost = 0
+            Else
+                cost = 1
+            End If
+
+            deletion = dist(i - 1, j) + 1
+            insertion = dist(i, j - 1) + 1
+            substitution = dist(i - 1, j - 1) + cost
+
+            dist(i, j) = deletion
+            If insertion < dist(i, j) Then dist(i, j) = insertion
+            If substitution < dist(i, j) Then dist(i, j) = substitution
+        Next j
+    Next i
+
+    editDistance = dist(len1, len2)
+    maxLen = len1
+    If len2 > maxLen Then maxLen = len2
+
+    If maxLen = 0 Then
+        NormalizedEditSimilarity = 1
+    Else
+        NormalizedEditSimilarity = 1 - (editDistance / maxLen)
+    End If
 End Function
 
 
@@ -162,9 +253,9 @@ End Sub
 Function FuzzyVLookup(ByVal LookupValue As String, _
                      ByVal TableArray As CellRange, _
                      ByVal IndexNum As Integer, _
-                     Optional NFPercent As Single, _
-                     Optional Rank As Integer, _
-                     Optional Algorithm As Integer) As Variant
+                     Optional NFPercent As Variant, _
+                     Optional Rank As Variant, _
+                     Optional Algorithm As Variant) As Variant
     On Error GoTo ErrorHandler
 
     Dim oSheet As Object
@@ -179,12 +270,24 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
     Dim strListString as String
     Dim vCurValue As Variant
     Dim lastCol As Long
+    Dim intRank As Integer
+    Dim intAlgorithm As Integer
 
     LookupValue = LCase$(Trim(LookupValue))
 
     ' Assign defaults for optional parameters
-    If IsMissing(Rank) Then Rank = 1
-    If IsMissing(Algorithm) Then Algorithm = 3
+    If IsMissing(Rank) Or IsEmpty(Rank) Then
+        intRank = 1
+    Else
+        intRank = CInt(Rank)
+    End If
+
+    If IsMissing(Algorithm) Or IsEmpty(Algorithm) Then
+        intAlgorithm = 3
+    Else
+        intAlgorithm = CInt(Algorithm)
+    End If
+    If intAlgorithm < 1 Or intAlgorithm > 3 Then intAlgorithm = 3
 
     ' Use the sheet that owns TableArray rather than whichever sheet happens to
     ' be active — makes the function correct when called from a different sheet.
@@ -207,19 +310,19 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
         Exit Function
     End If
 
-    If Rank < 1 Then
+    If intRank < 1 Then
         FuzzyVLookup = "*** 'Rank' must be an integer > 0 ***"
         Exit Function
     End If
 
-    If IsMissing(NFPercent) Then
+    If IsMissing(NFPercent) Or IsEmpty(NFPercent) Then
         sngMinPercent = 0.05
     Else
-        If (NFPercent <= 0) Or (NFPercent > 1) Then
+        sngMinPercent = CSng(NFPercent)
+        If (sngMinPercent <= 0) Or (sngMinPercent > 1) Then
             FuzzyVLookup = "*** 'NFPercent' must be a percentage > 0 and <= 1 ***"            
             Exit Function
         End If
-        sngMinPercent = NFPercent
     End If
 
     'Find the last column of the table
@@ -232,7 +335,7 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
     End If
     'End validation.
 
-    ReDim sortedRanks(1 To Rank)
+    ReDim sortedRanks(1 To intRank)
 
     lEndRow = TableArray.RangeAddress.EndRow
     lRow = TableArray.RangeAddress.StartRow
@@ -247,22 +350,22 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
 
             sngCurPercent = FuzzyPercent(String1:=LookupValue, _
                                           String2:=strListString, _
-                                          Algorithm:=Algorithm, _
+                                          Algorithm:=intAlgorithm, _
                                           Normalised:=True)
 
             If sngCurPercent >= sngMinPercent Then
                 ' Insert into sortedRanks using binary search
-                InsertSortedRank sortedRanks, Rank, lRow, sngCurPercent
+                InsertSortedRank sortedRanks, intRank, lRow, sngCurPercent
             End If
         End If
 
         lRow = lRow + 1
     Loop
 
-    If sortedRanks(Rank).Percentage < sngMinPercent Then
+    If sortedRanks(intRank).Percentage < sngMinPercent Then
         FuzzyVLookup = CVErr(2042)
     Else
-        intBestMatchPtr = sortedRanks(Rank).Offset
+        intBestMatchPtr = sortedRanks(intRank).Offset
         If IndexNum > 0 Then
             If lCol + IndexNum - 1 <= oSheet.Columns.Count Then
                 FuzzyVLookup = oSheet.getCellByPosition(lCol + IndexNum - 1, intBestMatchPtr).String
