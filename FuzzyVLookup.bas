@@ -47,22 +47,20 @@ End Sub
 Function GetNormalized(ByVal s As String) As String
     Dim normalized As Variant
     Dim cacheKey As String
+    Dim found As Boolean
     
     InitCaches
     
-    ' Use trimmed string as cache key (original string before normalization)
+    ' Use original string as cache key
     cacheKey = s
     
     ' Try to get from cache
-    On Error Resume Next
-    normalized = normCache(cacheKey)
-    If Err.Number = 0 Then
-        ' Found in cache
-        GetNormalized = normalized
-        On Error GoTo 0
+    found = TryGetFromNormCache(cacheKey, normalized)
+    
+    If found Then
+        GetNormalized = CStr(normalized)
         Exit Function
     End If
-    On Error GoTo 0
     
     ' Not in cache, compute normalization
     GetNormalized = LCase$(Trim(s))
@@ -70,11 +68,38 @@ Function GetNormalized(ByVal s As String) As String
     
     ' Add to cache if under limit
     If normCache.Count < MAX_NORM_CACHE Then
-        On Error Resume Next
-        normCache.Add GetNormalized, cacheKey
-        On Error GoTo 0
+        TryAddToNormCache cacheKey, GetNormalized
     End If
 End Function
+
+
+' Helper: isolated error handling for collection lookup
+Private Function TryGetFromNormCache(ByVal cacheKey As String, ByRef value As Variant) As Boolean
+    On Error GoTo NotFound
+    value = normCache.Item(cacheKey)
+    TryGetFromNormCache = True
+    On Error GoTo 0
+    Exit Function
+NotFound:
+    TryGetFromNormCache = False
+    Resume DoneNotFound
+DoneNotFound:
+    On Error GoTo 0
+End Function
+
+
+' Helper: isolated error handling for collection add
+Private Sub TryAddToNormCache(ByVal cacheKey As String, ByVal value As String)
+    On Error GoTo AddFailed
+    normCache.Add value, cacheKey
+    On Error GoTo 0
+    Exit Sub
+AddFailed:
+    ' Key already exists or other error - silently ignore
+    Resume DoneAddFailed
+DoneAddFailed:
+    On Error GoTo 0
+End Sub
 
 
 '*************************************
@@ -82,15 +107,30 @@ End Function
 '** Returns True and score if cached **
 '*************************************
 Function GetCachedScore(ByVal key As String, ByRef score As Single) As Boolean
+    Dim cachedVal As Variant
+    
     InitCaches
     
-    On Error Resume Next
-    score = scoreCache(key)
-    If Err.Number = 0 Then
+    If TryGetFromScoreCache(key, cachedVal) Then
+        score = CSng(cachedVal)
         GetCachedScore = True
     Else
         GetCachedScore = False
     End If
+End Function
+
+
+' Helper: isolated error handling for collection lookup
+Private Function TryGetFromScoreCache(ByVal key As String, ByRef value As Variant) As Boolean
+    On Error GoTo NotFound
+    value = scoreCache.Item(key)
+    TryGetFromScoreCache = True
+    On Error GoTo 0
+    Exit Function
+NotFound:
+    TryGetFromScoreCache = False
+    Resume DoneNotFound
+DoneNotFound:
     On Error GoTo 0
 End Function
 
@@ -108,13 +148,25 @@ Sub AddCachedScore(ByVal key As String, ByVal score As Single)
         scoreCacheCount = 0
     End If
     
-    On Error Resume Next
-    scoreCache.Add score, key
-    If Err.Number = 0 Then
+    If TryAddToScoreCache(key, score) Then
         scoreCacheCount = scoreCacheCount + 1
     End If
-    On Error GoTo 0
 End Sub
+
+
+' Helper: isolated error handling for collection add
+Private Function TryAddToScoreCache(ByVal key As String, ByVal score As Single) As Boolean
+    On Error GoTo AddFailed
+    scoreCache.Add score, key
+    TryAddToScoreCache = True
+    On Error GoTo 0
+    Exit Function
+AddFailed:
+    TryAddToScoreCache = False
+    Resume DoneAddFailed
+DoneAddFailed:
+    On Error GoTo 0
+End Function
 
 
 '*************************************
@@ -562,7 +614,7 @@ Function FuzzyVLookup(ByVal lookupValue As String, _
                                               Normalised:=True)
 
                 If curPercent >= minPercent Then
-                    ' Insert into sortedRanks using binary search
+                    ' Insert into sortedRanks
                     InsertSortedRank sortedRanks, rankNum, row, curPercent
                 End If
             End If
@@ -636,6 +688,12 @@ Sub TestFuzzyVLookup
     ' Clear text and numeric values in the test sheet
     sheet.clearContents(7)
 
+    ' Reset caches so each test run starts fresh
+    Set normCache = New Collection
+    Set scoreCache = New Collection
+    scoreCacheCount = 0
+    cachesInitialized = True
+
     ' Define a small dataset in the sheet
     sheet.getCellByPosition(0, 0).String = "Name"
     sheet.getCellByPosition(1, 0).String = "Age"
@@ -669,7 +727,7 @@ Sub TestFuzzyVLookup
     errCode = probeCell.getError()
     If errCode <> 0 Then argSep = ","
 
-    formula = "=FUZZYVLOOKUP(""Willam""" & argSep & " A2:C5" & argSep & " 2" & argSep & " 1/2" & argSep & " 1" & argSep & " 1)"
+    formula = "=FUZZYVLOOKUP(""Willam""" & argSep & " A2:C5" & argSep & " 2" & argSep & " 0.5" & argSep & " 1" & argSep & " 1)"
     cell.setFormula(formula)
 
     ' Read the result from the cell
