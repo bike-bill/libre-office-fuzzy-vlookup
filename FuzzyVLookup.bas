@@ -11,8 +11,8 @@ Const DEFAULT_MIN_PERCENT As Single = 0.05
 Const DEFAULT_ALGORITHM As Integer = 1
 Const DEFAULT_RANK As Integer = 1
 ' Jaro-Winkler tuning constants
-Const JARO_WINKLER_PREFIX_SCALE As Single = 0.1 ' Standard Winkler prefix weight
-Const JARO_WINKLER_MAX_PREFIX_LEN As Integer = 4 ' Max prefix length for Winkler adjustment
+Const JARO_WINKLER_PREFIX_SCALE As Single = 0.1
+Const JARO_WINKLER_MAX_PREFIX_LEN As Integer = 4
 
 Type RankInfo
     Offset          As Long
@@ -23,40 +23,40 @@ End Type
 '*************************************
 '** Return a % match on two strings **
 '*************************************
-Function FuzzyPercent(ByVal String1 As String, _
-                     ByVal String2 As String, _
-                     Optional Algorithm As Variant, _
-                     Optional Normalised As Variant) As Single
-    Dim intAlgorithm As Integer
-    Dim blnNormalised As Boolean
+Function FuzzyPercent(ByVal string1 As String, _
+                     ByVal string2 As String, _
+                     Optional algorithm As Variant, _
+                     Optional normalised As Variant) As Single
+    Dim algo As Integer
+    Dim isNormalised As Boolean
 
     ' Optional args from Calc formulas are Variants; default explicitly.
-    If IsMissing(Algorithm) Or IsEmpty(Algorithm) Then
-        intAlgorithm = DEFAULT_ALGORITHM
+    If IsMissing(algorithm) Or IsEmpty(algorithm) Then
+        algo = DEFAULT_ALGORITHM
     Else
-        intAlgorithm = CInt(Algorithm)
+        algo = CInt(algorithm)
     End If
-    If intAlgorithm < 1 Or intAlgorithm > 2 Then intAlgorithm = DEFAULT_ALGORITHM
+    If algo < 1 Or algo > 2 Then algo = DEFAULT_ALGORITHM
 
-    If IsMissing(Normalised) Or IsEmpty(Normalised) Then
-        blnNormalised = False
+    If IsMissing(normalised) Or IsEmpty(normalised) Then
+        isNormalised = False
     Else
-        blnNormalised = CBool(Normalised)
+        isNormalised = CBool(normalised)
     End If
 
     '-------------------------------------------------------
     '-- If strings haven't been normalised, normalise them --
     '-------------------------------------------------------
-    If blnNormalised = False Then
-        String1 = LCase$(Trim(String1))
-        String2 = LCase$(Trim(String2))
+    If isNormalised = False Then
+        string1 = LCase$(Trim(string1))
+        string2 = LCase$(Trim(string2))
         ' Tokenize and sort to handle reversed names (e.g. "John Smith" vs "Smith, John")
-        String1 = TokenizeAndSort(String1)
-        String2 = TokenizeAndSort(String2)
+        string1 = TokenizeAndSort(string1)
+        string2 = TokenizeAndSort(string2)
     End If
 
     ' Error handling for empty strings
-    If Len(String1) = 0 Or Len(String2) = 0 Then
+    If Len(string1) = 0 Or Len(string2) = 0 Then
         FuzzyPercent = 0
         Exit Function
     End If
@@ -64,7 +64,7 @@ Function FuzzyPercent(ByVal String1 As String, _
     '----------------------------------------------
     '-- Give 100% match if strings exactly equal --
     '----------------------------------------------
-    If String1 = String2 Then
+    If string1 = string2 Then
         FuzzyPercent = 1
         Exit Function
     End If
@@ -72,7 +72,7 @@ Function FuzzyPercent(ByVal String1 As String, _
     '----------------------------------------
     '-- Give 0% match if string length < 2 --
     '----------------------------------------
-    If Len(String1) < 2 Or Len(String2) < 2 Then
+    If Len(string1) < 2 Or Len(string2) < 2 Then
         FuzzyPercent = 0
         Exit Function
     End If
@@ -81,10 +81,10 @@ Function FuzzyPercent(ByVal String1 As String, _
     '-- Algorithm 1 (default): Jaro-Winkler similarity      --
     '-- Algorithm 2: Normalized Levenshtein distance       --
     '--------------------------------------------------------
-    If intAlgorithm = 1 Then
-        FuzzyPercent = JaroWinklerSimilarity(String1, String2)
+    If algo = 1 Then
+        FuzzyPercent = JaroWinklerSimilarity(string1, string2)
     Else
-        FuzzyPercent = LevenshteinSimilarity(String1, String2)
+        FuzzyPercent = LevenshteinSimilarity(string1, string2)
     End If
 
 End Function
@@ -94,7 +94,7 @@ Private Function TokenizeAndSort(ByVal str As String) As String
     Dim tokens() As String
     ' Split on spaces and commas, replace commas with spaces first
     tokens = Split(Replace(str, ",", " "), " ")
-    
+
     ' Filter out empty tokens
     Dim cleanTokens() As String
     ReDim cleanTokens(0 To UBound(tokens))
@@ -107,15 +107,15 @@ Private Function TokenizeAndSort(ByVal str As String) As String
             tokenCount = tokenCount + 1
         End If
     Next i
-    
+
     If tokenCount = 0 Then
         TokenizeAndSort = ""
         Exit Function
     End If
-    
+
     ' Trim to actual token count
     ReDim Preserve cleanTokens(0 To tokenCount - 1)
-    
+
     ' Bubble sort tokens alphabetically (small arrays, simple sort is fine)
     Dim j As Integer, temp As String
     For i = 0 To tokenCount - 1
@@ -127,7 +127,7 @@ Private Function TokenizeAndSort(ByVal str As String) As String
             End If
         Next j
     Next i
-    
+
     TokenizeAndSort = Join(cleanTokens, " ")
 End Function
 
@@ -136,7 +136,7 @@ Private Function JaroWinklerSimilarity(ByVal s1 As String, ByVal s2 As String) A
     Dim len1 As Integer, len2 As Integer
     len1 = Len(s1)
     len2 = Len(s2)
-    
+
     If len1 = 0 And len2 = 0 Then
         JaroWinklerSimilarity = 1
         Exit Function
@@ -145,19 +145,19 @@ Private Function JaroWinklerSimilarity(ByVal s1 As String, ByVal s2 As String) A
         JaroWinklerSimilarity = 0
         Exit Function
     End If
-    
+
     ' Max distance for matching characters: floor(max(len1, len2) / 2) - 1
     Dim maxDist As Integer
     maxDist = len1
     If len2 > len1 Then maxDist = len2
     maxDist = Int(maxDist / 2) - 1
     If maxDist < 0 Then maxDist = 0
-    
+
     ' Track matching characters in each string
     Dim match1() As Boolean, match2() As Boolean
     ReDim match1(1 To len1) As Boolean
     ReDim match2(1 To len2) As Boolean
-    
+
     ' Count matching characters
     Dim m As Integer
     m = 0
@@ -168,7 +168,7 @@ Private Function JaroWinklerSimilarity(ByVal s1 As String, ByVal s2 As String) A
         If i - maxDist > 1 Then startPos = i - maxDist
         endPos = len2
         If i + maxDist < len2 Then endPos = i + maxDist
-        
+
         For j = startPos To endPos
             If Not match2(j) Then
                 If Mid$(s1, i, 1) = Mid$(s2, j, 1) Then
@@ -180,12 +180,12 @@ Private Function JaroWinklerSimilarity(ByVal s1 As String, ByVal s2 As String) A
             End If
         Next j
     Next i
-    
+
     If m = 0 Then
         JaroWinklerSimilarity = 0
         Exit Function
     End If
-    
+
     ' Count transpositions (mismatched order matches)
     Dim t As Integer
     t = 0
@@ -205,11 +205,11 @@ Private Function JaroWinklerSimilarity(ByVal s1 As String, ByVal s2 As String) A
         End If
     Next i
     t = t \ 2  ' Integer division (transpositions are counted twice)
-    
+
     ' Calculate Jaro distance
     Dim jaro As Single
     jaro = (m / len1 + m / len2 + (m - t) / m) / 3
-    
+
     ' Winkler prefix adjustment
     Dim l As Integer
     l = 0
@@ -224,7 +224,7 @@ Private Function JaroWinklerSimilarity(ByVal s1 As String, ByVal s2 As String) A
             Exit For
         End If
     Next i
-    
+
     ' Final Jaro-Winkler similarity
     JaroWinklerSimilarity = jaro + l * JARO_WINKLER_PREFIX_SCALE * (1 - jaro)
 End Function
@@ -286,15 +286,15 @@ Private Function LevenshteinSimilarity(ByVal s1 As String, ByVal s2 As String) A
 End Function
 
 
-Function FuzzyVLookup(ByVal LookupValue As String, _
-                     ByVal TableArray As Variant, _
-                     ByVal IndexNum As Integer, _
-                     Optional NFPercent As Variant, _
-                     Optional Rank As Variant, _
-                     Optional Algorithm As Variant) As Variant
+Function FuzzyVLookup(ByVal lookupValue As String, _
+                     ByVal tableArray As Variant, _
+                     ByVal indexNum As Integer, _
+                     Optional nfPercent As Variant, _
+                     Optional rank As Variant, _
+                     Optional algorithm As Variant) As Variant
     On Error GoTo ErrorHandler
-    
-    Dim lRow As Long
+
+    Dim row As Long
     Dim minPercent As Single
     Dim curPercent As Single
     Dim bestMatchPtr As Long
@@ -302,131 +302,131 @@ Function FuzzyVLookup(ByVal LookupValue As String, _
     Dim listString As String
     Dim curValue As Variant
     Dim nCols As Long
-    Dim intRank As Integer
-    Dim intAlgorithm As Integer
+    Dim rankNum As Integer
+    Dim algo As Integer
     Dim arrData As Variant
     Dim rowLB As Long, rowUB As Long
     Dim colLB As Long, colUB As Long
     Dim retCol As Long
     Dim relRow As Long
     Dim haveData As Boolean
-    
-    LookupValue = LCase$(Trim(LookupValue))
-    
+
+    lookupValue = LCase$(Trim(lookupValue))
+
     ' Normalize TableArray into a 2D array.
     ' With Option VBASupport 1, Calc passes a range reference as a VBA-style
     ' Range object (TypeName = "Range").  Its .Value property gives a 2D array.
     ' A plain array can be used directly.
     haveData = False
-    If IsArray(TableArray) Then
-        arrData = TableArray
+    If IsArray(tableArray) Then
+        arrData = tableArray
         haveData = True
-    ElseIf IsObject(TableArray) Then
-        If TableArray Is Nothing Then
+    ElseIf IsObject(tableArray) Then
+        If tableArray Is Nothing Then
             FuzzyVLookup = "*** TableArray is invalid ***"
             Exit Function
         End If
-        If TypeName(TableArray) = "Range" Then
+        If TypeName(tableArray) = "Range" Then
             ' VBA-compatible Range object — .Value returns a 2D Variant array
-            arrData = TableArray.Value
+            arrData = tableArray.Value
             haveData = True
         Else
             ' UNO SheetCellRange — use getDataArray()
             On Error GoTo RangeArrayError
-            arrData = TableArray.getDataArray()
+            arrData = tableArray.getDataArray()
             haveData = True
             On Error GoTo ErrorHandler
         End If
     End If
-    
+
     If haveData = False Then
         FuzzyVLookup = "*** TableArray must be a CellRange or range array ***"
         Exit Function
     End If
-    
+
     rowLB = LBound(arrData, 1)
     rowUB = UBound(arrData, 1)
     colLB = LBound(arrData, 2)
     colUB = UBound(arrData, 2)
     nCols = colUB - colLB + 1
-    
+
     ' Assign defaults for optional parameters (conversion-safe)
-    intRank = DEFAULT_RANK
-    If Not (IsMissing(Rank) Or IsEmpty(Rank)) Then
-        If IsNumeric(Rank) Then intRank = CInt(Rank)
+    rankNum = DEFAULT_RANK
+    If Not (IsMissing(rank) Or IsEmpty(rank)) Then
+        If IsNumeric(rank) Then rankNum = CInt(rank)
     End If
-    
-    intAlgorithm = DEFAULT_ALGORITHM
-    If Not (IsMissing(Algorithm) Or IsEmpty(Algorithm)) Then
-        If IsNumeric(Algorithm) Then intAlgorithm = CInt(Algorithm)
+
+    algo = DEFAULT_ALGORITHM
+    If Not (IsMissing(algorithm) Or IsEmpty(algorithm)) Then
+        If IsNumeric(algorithm) Then algo = CInt(algorithm)
     End If
-    If intAlgorithm < 1 Or intAlgorithm > 2 Then intAlgorithm = DEFAULT_ALGORITHM
-    
-    If IndexNum < 0 Then
+    If algo < 1 Or algo > 2 Then algo = DEFAULT_ALGORITHM
+
+    If indexNum < 0 Then
         FuzzyVLookup = "*** IndexNum must be greater than or equal to 0 ***"
         Exit Function
     End If
-    
-    If intRank < 1 Then
+
+    If rankNum < 1 Then
         FuzzyVLookup = "*** 'Rank' must be an integer > 0 ***"
         Exit Function
     End If
-    
+
     minPercent = DEFAULT_MIN_PERCENT
-    If Not (IsMissing(NFPercent) Or IsEmpty(NFPercent)) Then
-        If Not IsNumeric(NFPercent) Then
+    If Not (IsMissing(nfPercent) Or IsEmpty(nfPercent)) Then
+        If Not IsNumeric(nfPercent) Then
             FuzzyVLookup = "*** 'NFPercent' must be numeric and > 0 and <= 1 ***"
             Exit Function
         End If
-        minPercent = CSng(NFPercent)
+        minPercent = CSng(nfPercent)
         If (minPercent <= 0) Or (minPercent > 1) Then
             FuzzyVLookup = "*** 'NFPercent' must be a percentage > 0 and <= 1 ***"
             Exit Function
         End If
     End If
-    
-    If IndexNum > nCols And IndexNum > 0 Then
+
+    If indexNum > nCols And indexNum > 0 Then
         FuzzyVLookup = "*** IndexNum out of bounds ***"
         Exit Function
     End If
-    
-    ReDim sortedRanks(1 To intRank)
-    
-    lRow = rowLB
-    Do While lRow <= rowUB
-        curValue = arrData(lRow, colLB)
-        
+
+    ReDim sortedRanks(1 To rankNum)
+
+    row = rowLB
+    Do While row <= rowUB
+        curValue = arrData(row, colLB)
+
         ' Skip blank cells rather than halting — the table may have gaps
         If Trim(CStr(curValue)) <> "" Then
             listString = LCase$(Trim(curValue))
-            
-            curPercent = FuzzyPercent(String1:=LookupValue, _
+
+            curPercent = FuzzyPercent(String1:=lookupValue, _
                                           String2:=listString, _
-                                          Algorithm:=intAlgorithm, _
+                                          Algorithm:=algo, _
                                           Normalised:=True)
-            
+
             If curPercent >= minPercent Then
                 ' Insert into sortedRanks using binary search
-                InsertSortedRank sortedRanks, intRank, lRow, curPercent
+                InsertSortedRank sortedRanks, rankNum, row, curPercent
             End If
         End If
-        
-        lRow = lRow + 1
+
+        row = row + 1
     Loop
-    
-    If sortedRanks(intRank).Percentage < minPercent Then
+
+    If sortedRanks(rankNum).Percentage < minPercent Then
         FuzzyVLookup = CVErr(ERR_NA)
     Else
-        bestMatchPtr = sortedRanks(intRank).Offset
-        If IndexNum > 0 Then
-            retCol = colLB + IndexNum - 1
+        bestMatchPtr = sortedRanks(rankNum).Offset
+        If indexNum > 0 Then
+            retCol = colLB + indexNum - 1
             FuzzyVLookup = arrData(bestMatchPtr, retCol)
         Else
             relRow = bestMatchPtr - rowLB + 1
             FuzzyVLookup = relRow
         End If
     End If
-    
+
     Exit Function
 RangeArrayError:
     FuzzyVLookup = "*** TableArray must be a CellRange or range array ***"
@@ -454,77 +454,77 @@ End Sub
 
 
 Sub TestFuzzyVLookup
-    Dim oDoc As Object
-    Dim oSheets As Object
-    Dim oSheet As Object
-    Dim oCell As Object
-    Dim oProbeCell As Object
-    Dim vResult As Variant
-    Dim sFormula As String
-    Dim sArgSep As String
-    Dim nErr As Long
+    Dim doc As Object
+    Dim sheets As Object
+    Dim sheet As Object
+    Dim cell As Object
+    Dim probeCell As Object
+    Dim result As Variant
+    Dim formula As String
+    Dim argSep As String
+    Dim errCode As Long
     Dim msg As String
     Const TEST_SHEET_NAME As String = "FuzzyVLookupTest"
-    
+
     ' Use a dedicated test sheet — never touch the user's active sheet
-    oDoc = ThisComponent
-    oSheets = oDoc.Sheets
-    If oSheets.hasByName(TEST_SHEET_NAME) Then
-        oSheet = oSheets.getByName(TEST_SHEET_NAME)
+    doc = ThisComponent
+    sheets = doc.Sheets
+    If sheets.hasByName(TEST_SHEET_NAME) Then
+        sheet = sheets.getByName(TEST_SHEET_NAME)
     Else
-        oSheets.insertNewByName(TEST_SHEET_NAME, oSheets.Count)
-        oSheet = oSheets.getByName(TEST_SHEET_NAME)
+        sheets.insertNewByName(TEST_SHEET_NAME, sheets.Count)
+        sheet = sheets.getByName(TEST_SHEET_NAME)
     End If
-    
+
     ' Clear text and numeric values in the test sheet
-    oSheet.clearContents(7)
-    
+    sheet.clearContents(7)
+
     ' Define a small dataset in the sheet
-    oSheet.getCellByPosition(0, 0).String = "Name"
-    oSheet.getCellByPosition(1, 0).String = "Age"
-    oSheet.getCellByPosition(2, 0).String = "City"
-    
-    oSheet.getCellByPosition(0, 1).String = "William"
-    oSheet.getCellByPosition(1, 1).String = "25"
-    oSheet.getCellByPosition(2, 1).String = "New York"
-    
-    oSheet.getCellByPosition(0, 2).String = "John"
-    oSheet.getCellByPosition(1, 2).String = "30"
-    oSheet.getCellByPosition(2, 2).String = "Los Angeles"
-    
-    oSheet.getCellByPosition(0, 3).String = "Anna"
-    oSheet.getCellByPosition(1, 3).String = "28"
-    oSheet.getCellByPosition(2, 3).String = "Chicago"
-    
-    oSheet.getCellByPosition(0, 4).String = "Michael"
-    oSheet.getCellByPosition(1, 4).String = "35"
-    oSheet.getCellByPosition(2, 4).String = "Houston"
-    
+    sheet.getCellByPosition(0, 0).String = "Name"
+    sheet.getCellByPosition(1, 0).String = "Age"
+    sheet.getCellByPosition(2, 0).String = "City"
+
+    sheet.getCellByPosition(0, 1).String = "William"
+    sheet.getCellByPosition(1, 1).String = "25"
+    sheet.getCellByPosition(2, 1).String = "New York"
+
+    sheet.getCellByPosition(0, 2).String = "John"
+    sheet.getCellByPosition(1, 2).String = "30"
+    sheet.getCellByPosition(2, 2).String = "Los Angeles"
+
+    sheet.getCellByPosition(0, 3).String = "Anna"
+    sheet.getCellByPosition(1, 3).String = "28"
+    sheet.getCellByPosition(2, 3).String = "Chicago"
+
+    sheet.getCellByPosition(0, 4).String = "Michael"
+    sheet.getCellByPosition(1, 4).String = "35"
+    sheet.getCellByPosition(2, 4).String = "Houston"
+
     ' --- Test by writing the formula to a cell and reading the result ---
     ' This simulates a real user call, which is necessary to get the
     ' special VBA-style Range object that FuzzyVLookup expects.
-    oProbeCell = oSheet.getCellByPosition(6, 0) ' G1 (test output)
-    oCell = oSheet.getCellByPosition(5, 0) ' F1 (formula cell)
-    
+    probeCell = sheet.getCellByPosition(6, 0) ' G1 (test output)
+    cell = sheet.getCellByPosition(5, 0) ' F1 (formula cell)
+
     ' Detect Calc argument separator for locale-agnostic formula construction.
-    sArgSep = ";"
-    oProbeCell.setFormula("=SUM(1;2)")
-    nErr = oProbeCell.getError()
-    If nErr <> 0 Then sArgSep = ","
-    
-    sFormula = "=FUZZYVLOOKUP(""Willam""" & sArgSep & " A2:C5" & sArgSep & " 2" & sArgSep & " 1/2" & sArgSep & " 1" & sArgSep & " 1)"
-    oCell.setFormula(sFormula)
-    
+    argSep = ";"
+    probeCell.setFormula("=SUM(1;2)")
+    errCode = probeCell.getError()
+    If errCode <> 0 Then argSep = ","
+
+    formula = "=FUZZYVLOOKUP(""Willam""" & argSep & " A2:C5" & argSep & " 2" & argSep & " 1/2" & argSep & " 1" & argSep & " 1)"
+    cell.setFormula(formula)
+
     ' Read the result from the cell
-    vResult = oCell.getString()
-    If vResult = "" Then vResult = oCell.getValue()
-    
+    result = cell.getString()
+    If result = "" Then result = cell.getValue()
+
     ' Display result in test sheet cell instead of MsgBox (headless-friendly)
-    If oCell.getError() <> 0 Then
-        msg = "Test failed. Formula returned error code: " & oCell.getError()
-        oProbeCell.String = msg
+    If cell.getError() <> 0 Then
+        msg = "Test failed. Formula returned error code: " & cell.getError()
+        probeCell.String = msg
     Else
-        msg = "Match found for 'Willam': " & vResult
-        oProbeCell.String = msg
+        msg = "Match found for 'Willam': " & result
+        probeCell.String = msg
     End If
 End Sub
