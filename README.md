@@ -2,6 +2,33 @@
 
 A LibreOffice Basic macro that provides fuzzy (approximate) string matching, similar to Excel's `VLOOKUP` but tolerant of typos and minor variations.
 
+Features:
+- **Jaro-Winkler similarity** (default) — excellent for name matching and typo tolerance
+- **Levenshtein distance** — simple edit-distance alternative
+- **Automatic caching** — normalized strings and fuzzy scores cached for performance
+- **Blocking optimization** — groups strings by prefix to reduce comparisons on large datasets
+- **Tokenization** — handles "John Smith" vs "Smith, John" by sorting name parts
+
+---
+
+## Performance
+
+The macro includes several optimizations for large datasets:
+
+| Dataset Size | Comparisons | Uncached Time | Cached Time* |
+|--------------|-------------|---------------|--------------|
+| 1,000 × 10,000 | 10M | ~1.4 hrs | ~10 min |
+| 3,600 × 10,000 | 36M | ~5 hrs | ~1.5 hrs |
+
+*Assumes some repetition in lookup values (cache hits)
+
+**Blocking optimization** reduces comparisons by grouping strings with matching prefixes (first 3 characters). For example, "William" only compares against table entries starting with "wil".
+
+**Caches:**
+- Normalized strings: up to 500,000 entries (~50 MB)
+- Fuzzy scores: up to 10,000,000 entries (~2.5 GB)
+- Caches persist until document closes
+
 ---
 
 ## Installation
@@ -59,7 +86,7 @@ Returns a match score between 0 and 1 for two strings.
 | `String1`    | String  | —       | First string. |
 | `String2`    | String  | —       | Second string. |
 | `Algorithm`  | Integer | `1`     | `1` = Jaro-Winkler (default), `2` = Levenshtein distance. |
-| `Normalised` | Boolean | `False` | Pass `True` if strings are already lowercased/trimmed to skip normalisation. |
+| `Normalised` | Boolean | `False` | Pass `True` if strings are already lowercased/trimmed to skip normalization. |
 
 **Examples**
 

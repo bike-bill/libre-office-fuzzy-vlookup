@@ -13,6 +13,131 @@ Const DEFAULT_RANK As Integer = 1
 ' Jaro-Winkler tuning constants
 Const JARO_WINKLER_PREFIX_SCALE As Single = 0.1
 Const JARO_WINKLER_MAX_PREFIX_LEN As Integer = 4
+' Cache size limits (for 32GB RAM system)
+Const MAX_NORM_CACHE As Long = 500000      ' 500k normalized strings ~50 MB
+Const MAX_SCORE_CACHE As Long = 10000000   ' 10M score entries ~2.5 GB
+' Blocking: number of chars for block key (prefix matching)
+Const BLOCK_KEY_LENGTH As Integer = 3
+
+' Module-level caches
+Dim normCache As Collection        ' Normalized strings: key=original, value=normalized
+Dim scoreCache As Collection       ' Fuzzy scores: key=norm1|norm2|algo, value=score
+Dim scoreCacheCount As Long       ' Track score cache size for eviction
+Dim cachesInitialized As Boolean  ' Track if caches have been initialized
+
+
+'*************************************
+'** Initialize caches if needed      **
+'*************************************
+Sub InitCaches()
+    If Not cachesInitialized Then
+        Set normCache = New Collection
+        Set scoreCache = New Collection
+        scoreCacheCount = 0
+        cachesInitialized = True
+    End If
+End Sub
+
+
+'*************************************
+'** Get normalized string from cache **
+'** Returns cached value or computes  **
+'** and caches the result            **
+'*************************************
+Function GetNormalized(ByVal s As String) As String
+    Dim normalized As Variant
+    Dim cacheKey As String
+    
+    InitCaches
+    
+    ' Use trimmed string as cache key (original string before normalization)
+    cacheKey = s
+    
+    ' Try to get from cache
+    On Error Resume Next
+    normalized = normCache(cacheKey)
+    If Err.Number = 0 Then
+        ' Found in cache
+        GetNormalized = normalized
+        On Error GoTo 0
+        Exit Function
+    End If
+    On Error GoTo 0
+    
+    ' Not in cache, compute normalization
+    GetNormalized = LCase$(Trim(s))
+    GetNormalized = TokenizeAndSort(GetNormalized)
+    
+    ' Add to cache if under limit
+    If normCache.Count < MAX_NORM_CACHE Then
+        On Error Resume Next
+        normCache.Add GetNormalized, cacheKey
+        On Error GoTo 0
+    End If
+End Function
+
+
+'*************************************
+'** Get cached fuzzy score if exists **
+'** Returns True and score if cached **
+'*************************************
+Function GetCachedScore(ByVal key As String, ByRef score As Single) As Boolean
+    InitCaches
+    
+    On Error Resume Next
+    score = scoreCache(key)
+    If Err.Number = 0 Then
+        GetCachedScore = True
+    Else
+        GetCachedScore = False
+    End If
+    On Error GoTo 0
+End Function
+
+
+'*************************************
+'** Add fuzzy score to cache         **
+'** Evicts all if over limit         **
+'*************************************
+Sub AddCachedScore(ByVal key As String, ByVal score As Single)
+    InitCaches
+    
+    ' Evict all if over limit (simple strategy)
+    If scoreCacheCount >= MAX_SCORE_CACHE Then
+        Set scoreCache = New Collection
+        scoreCacheCount = 0
+    End If
+    
+    On Error Resume Next
+    scoreCache.Add score, key
+    If Err.Number = 0 Then
+        scoreCacheCount = scoreCacheCount + 1
+    End If
+    On Error GoTo 0
+End Sub
+
+
+'*************************************
+'** Build cache key for score cache **
+'*************************************
+Function BuildScoreKey(ByVal norm1 As String, ByVal norm2 As String, ByVal algo As Integer) As String
+    BuildScoreKey = norm1 & "|" & norm2 & "|" & algo
+End Function
+
+
+'*************************************
+'** Compute block key from string    **
+'** Uses first N chars of normalized**
+'** string for blocking optimization**
+'*************************************
+Function GetBlockKey(ByVal normalized As String) As String
+    If Len(normalized) >= BLOCK_KEY_LENGTH Then
+        GetBlockKey = Left$(normalized, BLOCK_KEY_LENGTH)
+    Else
+        GetBlockKey = normalized
+    End If
+End Function
+
 
 Type RankInfo
     Offset          As Long
@@ -29,6 +154,9 @@ Function FuzzyPercent(ByVal string1 As String, _
                      Optional normalised As Variant) As Single
     Dim algo As Integer
     Dim isNormalised As Boolean
+    Dim norm1 As String, norm2 As String
+    Dim scoreKey As String
+    Dim cachedScore As Single
 
     ' Optional args from Calc formulas are Variants; default explicitly.
     If IsMissing(algorithm) Or IsEmpty(algorithm) Then
@@ -46,17 +174,18 @@ Function FuzzyPercent(ByVal string1 As String, _
 
     '-------------------------------------------------------
     '-- If strings haven't been normalised, normalise them --
+    '-- Uses cache to avoid re-processing                 --
     '-------------------------------------------------------
     If isNormalised = False Then
-        string1 = LCase$(Trim(string1))
-        string2 = LCase$(Trim(string2))
-        ' Tokenize and sort to handle reversed names (e.g. "John Smith" vs "Smith, John")
-        string1 = TokenizeAndSort(string1)
-        string2 = TokenizeAndSort(string2)
+        norm1 = GetNormalized(string1)
+        norm2 = GetNormalized(string2)
+    Else
+        norm1 = string1
+        norm2 = string2
     End If
 
     ' Error handling for empty strings
-    If Len(string1) = 0 Or Len(string2) = 0 Then
+    If Len(norm1) = 0 Or Len(norm2) = 0 Then
         FuzzyPercent = 0
         Exit Function
     End If
@@ -64,7 +193,7 @@ Function FuzzyPercent(ByVal string1 As String, _
     '----------------------------------------------
     '-- Give 100% match if strings exactly equal --
     '----------------------------------------------
-    If string1 = string2 Then
+    If norm1 = norm2 Then
         FuzzyPercent = 1
         Exit Function
     End If
@@ -72,8 +201,17 @@ Function FuzzyPercent(ByVal string1 As String, _
     '----------------------------------------
     '-- Give 0% match if string length < 2 --
     '----------------------------------------
-    If Len(string1) < 2 Or Len(string2) < 2 Then
+    If Len(norm1) < 2 Or Len(norm2) < 2 Then
         FuzzyPercent = 0
+        Exit Function
+    End If
+
+    '--------------------------------------------------------
+    '-- Check score cache before computing                  --
+    '--------------------------------------------------------
+    scoreKey = BuildScoreKey(norm1, norm2, algo)
+    If GetCachedScore(scoreKey, cachedScore) Then
+        FuzzyPercent = cachedScore
         Exit Function
     End If
 
@@ -82,11 +220,13 @@ Function FuzzyPercent(ByVal string1 As String, _
     '-- Algorithm 2: Normalized Levenshtein distance       --
     '--------------------------------------------------------
     If algo = 1 Then
-        FuzzyPercent = JaroWinklerSimilarity(string1, string2)
+        FuzzyPercent = JaroWinklerSimilarity(norm1, norm2)
     Else
-        FuzzyPercent = LevenshteinSimilarity(string1, string2)
+        FuzzyPercent = LevenshteinSimilarity(norm1, norm2)
     End If
 
+    ' Cache the computed score
+    AddCachedScore scoreKey, FuzzyPercent
 End Function
 
 
@@ -310,8 +450,17 @@ Function FuzzyVLookup(ByVal lookupValue As String, _
     Dim retCol As Long
     Dim relRow As Long
     Dim haveData As Boolean
+    
+    ' Normalized lookup value and its block key for blocking optimization
+    Dim normLookup As String
+    Dim lookupBlockKey As String
+
+    ' Initialize caches
+    InitCaches
 
     lookupValue = LCase$(Trim(lookupValue))
+    normLookup = GetNormalized(lookupValue)
+    lookupBlockKey = GetBlockKey(normLookup)
 
     ' Normalize TableArray into a 2D array.
     ' With Option VBASupport 1, Calc passes a range reference as a VBA-style
@@ -399,15 +548,23 @@ Function FuzzyVLookup(ByVal lookupValue As String, _
         ' Skip blank cells rather than halting — the table may have gaps
         If Trim(CStr(curValue)) <> "" Then
             listString = LCase$(Trim(curValue))
+            listString = GetNormalized(listString)
+            
+            ' Blocking optimization: only compare if block keys match
+            ' This dramatically reduces comparisons for large datasets
+            Dim tableBlockKey As String
+            tableBlockKey = GetBlockKey(listString)
+            
+            If tableBlockKey = lookupBlockKey Then
+                curPercent = FuzzyPercent(String1:=normLookup, _
+                                              String2:=listString, _
+                                              Algorithm:=algo, _
+                                              Normalised:=True)
 
-            curPercent = FuzzyPercent(String1:=lookupValue, _
-                                          String2:=listString, _
-                                          Algorithm:=algo, _
-                                          Normalised:=True)
-
-            If curPercent >= minPercent Then
-                ' Insert into sortedRanks using binary search
-                InsertSortedRank sortedRanks, rankNum, row, curPercent
+                If curPercent >= minPercent Then
+                    ' Insert into sortedRanks using binary search
+                    InsertSortedRank sortedRanks, rankNum, row, curPercent
+                End If
             End If
         End If
 
