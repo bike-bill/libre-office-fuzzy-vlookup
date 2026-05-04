@@ -31,7 +31,7 @@ Searches the first column of `TableArray` for the best fuzzy match to `LookupVal
 | `IndexNum`   | Integer     | —       | Column number to return (1 = first column of `TableArray`). Pass `0` to return the matched row's offset within the range instead. |
 | `NFPercent`  | Single      | `0.05`  | Minimum match percentage (0–1). Matches below this threshold are ignored. |
 | `Rank`       | Integer     | `1`     | Which match to return: `1` = best, `2` = second-best, etc. |
-| `Algorithm`  | Integer     | `3`     | Matching algorithm: `1` = character matching only, `2` = substring matching only, `3` = both combined. |
+| `Algorithm`  | Integer     | `1`     | Matching algorithm: `1` = Jaro-Winkler (default, best for names/typos), `2` = Levenshtein distance. |
 
 Returns the matched cell value, or a `#N/A` error if no match meets `NFPercent`.
 
@@ -58,7 +58,7 @@ Returns a match score between 0 and 1 for two strings.
 |--------------|---------|---------|-------------|
 | `String1`    | String  | —       | First string. |
 | `String2`    | String  | —       | Second string. |
-| `Algorithm`  | Integer | `3`     | `1` = characters, `2` = substrings, `3` = both. |
+| `Algorithm`  | Integer | `1`     | `1` = Jaro-Winkler (default), `2` = Levenshtein distance. |
 | `Normalised` | Boolean | `False` | Pass `True` if strings are already lowercased/trimmed to skip normalisation. |
 
 **Examples**
