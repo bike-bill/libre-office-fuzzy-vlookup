@@ -28,6 +28,8 @@ The macro includes several optimizations for large datasets:
 - Normalized strings: up to 500,000 entries (~50 MB)
 - Fuzzy scores: up to 10,000,000 entries (~2.5 GB)
 - Caches persist until document closes
+- **Caches start empty** and grow on-demand — a small spreadsheet with 100 names only uses ~100 cache entries, not the full limit
+- **Score cache eviction**: when the score cache reaches 10M entries, it clears entirely and starts fresh (simple strategy suitable for most use cases)
 
 ---
 
